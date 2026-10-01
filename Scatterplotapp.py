@@ -7,15 +7,20 @@ st.set_page_config(page_title="ICPMS Scatterplot", layout="wide")
 st.title("ICPMS Scatterplot")
 st.caption(
     "Upload an Excel file where each sheet is a group (e.g. a brand) and rows contain "
-    "measurements of several elements. The app combines all sheets and lets you explore "
-    "relationships between elements with scatterplots."
+    "ICPMS concentration data."
 )
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-CONTRAST_COLORS = ["#1f4fff", "#e8000b", "#2ca02c", "#ff7f0e", "#9467bd", "#17becf", "#8c564b"]
+# Fixed colors for the known glass classes; anything else falls back to the pool below.
+FIXED_CLASS_COLORS = {
+    "PED glass": "green",
+    "Packaging glass": "red",
+    "Floatglass": "blue",
+}
+FALLBACK_COLOR_POOL = ["purple", "orange", "brown", "magenta", "gray", "teal", "gold"]
 
 KNOWN_ELEMENT_COLS = [
     "Li7", "Na23", "Mg24", "Al27", "K39", "Ca42", "Ti49", "Mn55", "Fe57",
@@ -65,6 +70,22 @@ def detect_category_columns(df: pd.DataFrame, element_cols: list[str]) -> list[s
     return [c for c in candidates if df[c].nunique(dropna=True) <= 50]
 
 
+def build_color_map(df: pd.DataFrame, color_col: str | None) -> dict[str, str]:
+    """Map each category to a color: fixed colors for known glass classes,
+    fallback pool colors for everything else."""
+    if color_col is None or color_col not in df.columns:
+        return {}
+    categories = df[color_col].dropna().astype(str).unique()
+    color_map, pool_idx = {}, 0
+    for cat in categories:
+        if cat in FIXED_CLASS_COLORS:
+            color_map[cat] = FIXED_CLASS_COLORS[cat]
+        else:
+            color_map[cat] = FALLBACK_COLOR_POOL[pool_idx % len(FALLBACK_COLOR_POOL)]
+            pool_idx += 1
+    return color_map
+
+
 # ---------------------------------------------------------------------------
 # File upload
 # ---------------------------------------------------------------------------
@@ -111,7 +132,11 @@ with tab_single:
         elem = st.selectbox("Element", element_cols, index=0)
     with col2:
         color_options = ["(none)"] + category_cols
-        color_choice = st.selectbox("Color by", color_options, index=color_options.index("Sheet") if "Sheet" in color_options else 0)
+        color_choice = st.selectbox(
+            "Color by",
+            color_options,
+            index=color_options.index("Sheet") if "Sheet" in color_options else 0,
+        )
 
     log_y = st.checkbox("Log scale Y (concentration)", value=False)
 
@@ -127,7 +152,7 @@ with tab_single:
         log_y=log_y,
         title=f"{elem} concentration across samples",
         height=600,
-        color_discrete_sequence=CONTRAST_COLORS,
+        color_discrete_map=build_color_map(df_indexed, color_arg),
     )
     fig.update_traces(marker=dict(size=9, opacity=0.8, line=dict(width=0.5, color="white")))
     st.plotly_chart(fig, use_container_width=True)
@@ -167,7 +192,7 @@ with tab_grid:
         log_y=grid_log,
         height=220 * ((len(element_cols) // 4) + 1),
         title="Concentration vs. sample number for each element",
-        color_discrete_sequence=CONTRAST_COLORS,
+        color_discrete_map=build_color_map(long_df, grid_color_arg),
     )
     fig_grid.update_traces(marker=dict(size=5, opacity=0.7))
     fig_grid.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
