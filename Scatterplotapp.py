@@ -18,7 +18,7 @@ st.caption(
 FIXED_CLASS_COLORS = {
     "PED glass": "green",
     "Container glass": "red",
-    "Floatglass": "blue",
+    "Float glass": "blue",
 }
 FALLBACK_COLOR_POOL = ["purple", "orange", "brown", "magenta", "gray", "teal", "gold"]
 
